@@ -1,1 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weirdness Checker 2026</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
 
+  <div class="container">
+
+    <header>
+      <h1>Weirdness Checker (2026)</h1>
+      <p class="subtitle">
+        Enter any sentence — get word count + weirdness score<br>
+        (higher = more bizarre / unlikely / surreal)
+      </p>
+    </header>
+
+    <form method="POST" action="/analyze">
+      <textarea 
+        name="sentence" 
+        placeholder="e.g. flying broccoli eating ten thousand frogs is greater than 50 burritos"
+        required
+        rows="4"
+      ></textarea>
+      <button type="submit">Analyze Weirdness →</button>
+    </form>
+
+    <!-- 
+      The result block only appears when the server sends the page back after POST.
+      You can leave it empty here — your server.js will replace the whole page.
+    -->
+
+  </div>
+
+</body>
+</html>
