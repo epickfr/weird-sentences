@@ -1,0 +1,102 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f8f9fa;
+  color: #222;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 720px;
+  margin: 3rem auto;
+  padding: 0 1.5rem;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: #1a1a1a;
+}
+
+p {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #555;
+}
+
+form {
+  margin: 2rem 0;
+}
+
+textarea {
+  width: 100%;
+  height: 120px;
+  padding: 1rem;
+  font-size: 1.1rem;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  resize: vertical;
+}
+
+button {
+  display: block;
+  margin: 1.2rem auto;
+  padding: 0.9rem 2.2rem;
+  font-size: 1.1rem;
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: #0055aa;
+}
+
+.result {
+  margin-top: 2.5rem;
+  padding: 1.8rem;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.sentence {
+  font-style: italic;
+  margin: 1rem 0 1.5rem;
+  padding: 0.8rem;
+  background: #f0f4f8;
+  border-left: 4px solid #0066cc;
+}
+
+ul {
+  list-style: none;
+  margin: 1.2rem 0;
+}
+
+li {
+  margin: 0.6rem 0;
+  font-size: 1.05rem;
+}
+
+.bar {
+  height: 28px;
+  background: linear-gradient(to right, #4caf50, #ff9800, #f44336);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 1.2rem;
+}
+
+.fill {
+  height: 100%;
+  background: #222;
+  width: 0%;
+  transition: width 0.7s ease;
+}
