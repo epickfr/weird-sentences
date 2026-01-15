@@ -52,8 +52,15 @@ app.post('/analyze', async (req, res) => {
   let errorMessage = null;
 
   try {
-    if (!process.env.HF_TOKEN) {
-      throw new Error('HF_TOKEN not set in environment variables');
+    } catch (err) {
+      console.error('HF / weirdness error details:', {
+        message: err.message,
+        stack: err.stack ? err.stack.substring(0, 300) : 'no stack',
+        response: err.response ? err.response.status : 'no response',
+        data: err.response ? err.response.data : 'no data'
+      });
+      perplexityInfo = 'Error calculating weirdness';
+      errorMessage = 'Could not reach Hugging Face – check Render logs for details, or verify HF_TOKEN / free tier limits.';
     }
 
     const response = await hf.textGeneration({
