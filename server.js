@@ -1,5 +1,4 @@
 import express from 'express';
-import { HfInference } from '@huggingface/inference';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -12,32 +11,25 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Hugging Face client – will gracefully fail if token missing
-const hf = new HfInference(process.env.HF_TOKEN || '');
-
-// Middleware – static FIRST so /style.css etc. are served immediately
+// Middleware
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Parse form data
 app.use(express.urlencoded({ extended: true }));
 
-// Optional: health check for Render / monitoring
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
+// Health check (useful for Render)
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// Root route – serve static index.html if it exists
+// Home page
 app.get('/', (req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
   res.sendFile(indexPath, (err) => {
     if (err) {
-      console.error('Error sending index.html:', err);
-      res.status(404).send('index.html not found – check if public/index.html is in your repo');
+      console.error('Error sending index.html:', err.message);
+      res.status(404).send('index.html not found');
     }
   });
 });
 
-// Analyze route (POST only)
+// Analyze endpoint
 app.post('/analyze', async (req, res) => {
   const sentence = (req.body.sentence || '').trim();
 
@@ -52,48 +44,64 @@ app.post('/analyze', async (req, res) => {
   let errorMessage = null;
 
   try {
-    } catch (err) {
-      console.error('HF / weirdness error details:', {
-        message: err.message,
-        stack: err.stack ? err.stack.substring(0, 300) : 'no stack',
-        response: err.response ? err.response.status : 'no response',
-        data: err.response ? err.response.data : 'no data'
-      });
-      perplexityInfo = 'Error calculating weirdness';
-      errorMessage = 'Could not reach Hugging Face – check Render logs for details, or verify HF_TOKEN / free tier limits.';
+    if (!process.env.HF_TOKEN) {
+      throw new Error('HF_TOKEN is not set in environment variables');
     }
 
-    const response = await hf.textGeneration({
-      model: 'distilgpt2',
-      inputs: sentence,
-      parameters: {
-        max_new_tokens: 1,
-        details: true,
-        return_full_text: false
+    const hfResponse = await fetch(
+      'https://router.huggingface.co/hf-inference/models/distilgpt2',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputs: sentence,
+          parameters: {
+            max_new_tokens: 1,
+            details: true,
+            return_full_text: false
+          }
+        })
       }
-    });
+    );
 
-    if (!response?.details?.prefill?.length) {
-      throw new Error('No token logprobs returned from HF');
+    if (!hfResponse.ok) {
+      const errorText = await hfResponse.text();
+      throw new Error(`Hugging Face API error: ${hfResponse.status} - ${errorText}`);
     }
 
-    const totalLogProb = response.details.prefill
+    const data = await hfResponse.json();
+
+    if (!data?.details?.prefill?.length) {
+      throw new Error('No token logprobs returned from model');
+    }
+
+    const totalLogProb = data.details.prefill
       .map(token => token.logprob || 0)
       .reduce((a, b) => a + b, 0);
 
-    const tokenCount = response.details.prefill.length;
+    const tokenCount = data.details.prefill.length;
     const avgLogProb = totalLogProb / tokenCount;
     const ppl = Math.exp(-avgLogProb);
 
-    weirdness = Math.min(100, Math.max(0, Math.round((Math.log(ppl + 1) ** 1.7) * 11)));
+    weirdness = Math.min(100, Math.max(0, Math.round(
+      (Math.log(ppl + 1) ** 1.7) * 11
+    )));
+
     perplexityInfo = `Perplexity ≈ ${ppl.toFixed(1)}`;
   } catch (err) {
-    console.error('HF / weirdness error:', err.message);
+    console.error('HF / weirdness calculation failed:', {
+      message: err.message,
+      stack: err.stack ? err.stack.substring(0, 400) : 'no stack'
+    });
+
     perplexityInfo = 'Error calculating weirdness';
-    errorMessage = 'Could not reach Hugging Face – check HF_TOKEN or try later.';
+    errorMessage = 'Could not reach Hugging Face. Check logs or try again later.';
   }
 
-  // Send full HTML response with result
+  // Render result page
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -138,17 +146,17 @@ app.post('/analyze', async (req, res) => {
   `);
 });
 
-// HTML escape helper
+// HTML escape function
 function escapeHtml(unsafe) {
   return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-// Start server – bind to 0.0.0.0 for Render
+// Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port} → http://0.0.0.0:${port}`);
 });
