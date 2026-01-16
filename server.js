@@ -15,7 +15,7 @@ const port = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check (useful for Render)
+// Health check
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 // Home page
@@ -47,24 +47,25 @@ app.post('/analyze', async (req, res) => {
     if (!process.env.HF_TOKEN) {
       throw new Error('HF_TOKEN is not set in environment variables');
     }
-const hfResponse = await fetch(
-  'https://router.huggingface.co/hf-inference/models/HuggingFaceTB/SmolLM3-3B',
-  {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.HF_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      inputs: sentence,
-      parameters: {
-        max_new_tokens: 1,
-        details: true,  // Keep for now; if missing, code will fallback gracefully
-        return_full_text: false
+
+    const hfResponse = await fetch(
+      'https://router.huggingface.co/hf-inference/models/HuggingFaceTB/SmolLM3-3B',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputs: sentence,
+          parameters: {
+            max_new_tokens: 1,
+            details: true,
+            return_full_text: false
+          }
+        })
       }
-    })
-  }
-);
+    );
 
     if (!hfResponse.ok) {
       const errorText = await hfResponse.text();
@@ -72,47 +73,30 @@ const hfResponse = await fetch(
     }
 
     const data = await hfResponse.json();
-// After const data = await hfResponse.json();
 
-let totalLogProb = 0;
-let tokenCount = 0;
+    let totalLogProb = 0;
+    let tokenCount = 0;
 
-if (data?.details?.prefill?.length) {
-  // Preferred: use prefill logprobs (input tokens)
-  totalLogProb = data.details.prefill
-    .map(token => token.logprob || 0)
-    .reduce((a, b) => a + b, 0);
-  tokenCount = data.details.prefill.length;
-} else if (data?.generated_text || data?.choices?.[0]?.logprobs) {
-  // Fallback: approximate from generated token logprobs if available (some models return under choices)
-  const logprobsData = data.choices?.[0]?.logprobs?.content || [];
-  totalLogProb = logprobsData
-    .map(item => item.logprob || 0)
-    .reduce((a, b) => a + b, 0);
-  tokenCount = logprobsData.length;
-} else {
-  // Ultimate fallback: skip perplexity, set dummy low weirdness or error
-  perplexityInfo = 'Perplexity not available (model limits)';
-  weirdness = 10; // or calculate differently, e.g. based on sentence length/random
-  throw new Error('No usable logprobs; using fallback');
-}
-    if (!data?.details?.prefill?.length) {
-      throw new Error('No token logprobs returned from model');
+    if (data?.details?.prefill?.length > 0) {
+      // Use input token logprobs if available
+      totalLogProb = data.details.prefill
+        .map(token => token.logprob || 0)
+        .reduce((a, b) => a + b, 0);
+      tokenCount = data.details.prefill.length;
+    } else {
+      // Fallback when no detailed logprobs (common on router for some models)
+      perplexityInfo = 'Perplexity not available (model limits)';
+      weirdness = Math.min(100, Math.max(0, Math.round(wordCount * 4))); // Simple approx: higher words = weirder-ish
+      errorMessage = 'Detailed perplexity not supported by this model — using word count approximation.';
     }
 
-    const totalLogProb = data.details.prefill
-      .map(token => token.logprob || 0)
-      .reduce((a, b) => a + b, 0);
+    if (tokenCount > 0) {
+      const avgLogProb = totalLogProb / tokenCount;
+      const ppl = Math.exp(-avgLogProb);
+      weirdness = Math.min(100, Math.max(0, Math.round((Math.log(ppl + 1) ** 1.7) * 11)));
+      perplexityInfo = `Perplexity ≈ ${ppl.toFixed(1)}`;
+    }
 
-    const tokenCount = data.details.prefill.length;
-    const avgLogProb = totalLogProb / tokenCount;
-    const ppl = Math.exp(-avgLogProb);
-
-    weirdness = Math.min(100, Math.max(0, Math.round(
-      (Math.log(ppl + 1) ** 1.7) * 11
-    )));
-
-    perplexityInfo = `Perplexity ≈ ${ppl.toFixed(1)}`;
   } catch (err) {
     console.error('HF / weirdness calculation failed:', {
       message: err.message,
@@ -120,10 +104,10 @@ if (data?.details?.prefill?.length) {
     });
 
     perplexityInfo = 'Error calculating weirdness';
-    errorMessage = 'Could not reach Hugging Face. Check logs or try again later.';
+    errorMessage = 'Could not reach Hugging Face — check HF_TOKEN, quota, or try a shorter sentence.';
   }
 
-  // Render result page
+  // Send result page
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -168,7 +152,7 @@ if (data?.details?.prefill?.length) {
   `);
 });
 
-// HTML escape function
+// HTML escape
 function escapeHtml(unsafe) {
   return unsafe
     .replace(/&/g, "&amp;")
