@@ -49,53 +49,56 @@ app.post('/analyze', async (req, res) => {
     }
 
     const hfResponse = await fetch(
-      'https://router.huggingface.co/hf-inference/models/HuggingFaceTB/SmolLM3-3B',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.HF_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          inputs: sentence,
-          parameters: {
-            max_new_tokens: 1,
-            details: true,
-            return_full_text: false
-          }
-        })
-      }
-    );
+  'https://router.huggingface.co/v1/chat/completions',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'HuggingFaceTB/SmolLM3-3B:hf-inference',  // Explicit provider suffix for routing
+      messages: [
+        { role: 'user', content: sentence }
+      ],
+      max_tokens: 1,
+      temperature: 0.0,  // Deterministic for consistency
+      logprobs: true,    // Try for token logprobs (may work in some providers, but rare)
+      top_logprobs: 5
+    })
+  }
+);
 
-    if (!hfResponse.ok) {
-      const errorText = await hfResponse.text();
-      throw new Error(`Hugging Face API error: ${hfResponse.status} - ${errorText}`);
-    }
+if (!hfResponse.ok) {
+  const errorText = await hfResponse.text();
+  throw new Error(`Hugging Face API error: ${hfResponse.status} - ${errorText}`);
+}
 
-    const data = await hfResponse.json();
+const data = await hfResponse.json();
 
-    let totalLogProb = 0;
-    let tokenCount = 0;
+// Logprobs fallback (router chat often returns under choices[0].logprobs)
+let totalLogProb = 0;
+let tokenCount = 0;
 
-    if (data?.details?.prefill?.length > 0) {
-      // Use input token logprobs if available
-      totalLogProb = data.details.prefill
-        .map(token => token.logprob || 0)
-        .reduce((a, b) => a + b, 0);
-      tokenCount = data.details.prefill.length;
-    } else {
-      // Fallback when no detailed logprobs (common on router for some models)
-      perplexityInfo = 'Perplexity not available (model limits)';
-      weirdness = Math.min(100, Math.max(0, Math.round(wordCount * 4))); // Simple approx: higher words = weirder-ish
-      errorMessage = 'Detailed perplexity not supported by this model — using word count approximation.';
-    }
+const choice = data.choices?.[0];
+if (choice?.logprobs?.content?.length > 0) {
+  totalLogProb = choice.logprobs.content
+    .map(item => item.logprob || 0)
+    .reduce((a, b) => a + b, 0);
+  tokenCount = choice.logprobs.content.length;
+} else {
+  // No logprobs → fallback approximation
+  perplexityInfo = 'Perplexity not available (router limits)';
+  weirdness = Math.min(100, Math.max(0, Math.round(wordCount * 5))); // e.g., longer = weirder
+  errorMessage = 'Model/router does not return detailed logprobs — using word count approx for weirdness.';
+}
 
-    if (tokenCount > 0) {
-      const avgLogProb = totalLogProb / tokenCount;
-      const ppl = Math.exp(-avgLogProb);
-      weirdness = Math.min(100, Math.max(0, Math.round((Math.log(ppl + 1) ** 1.7) * 11)));
-      perplexityInfo = `Perplexity ≈ ${ppl.toFixed(1)}`;
-    }
+if (tokenCount > 0) {
+  const avgLogProb = totalLogProb / tokenCount;
+  const ppl = Math.exp(-avgLogProb);
+  weirdness = Math.min(100, Math.max(0, Math.round((Math.log(ppl + 1) ** 1.7) * 11)));
+  perplexityInfo = `Perplexity ≈ ${ppl.toFixed(1)}`;
+}
 
   } catch (err) {
     console.error('HF / weirdness calculation failed:', {
