@@ -48,24 +48,24 @@ app.post('/analyze', async (req, res) => {
       throw new Error('HF_TOKEN is not set in environment variables');
     }
 
-    const hfResponse = await fetch(
-      'https://router.huggingface.co/hf-inference/models/HuggingFaceTB/SmolLM3-3B',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.HF_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          inputs: sentence,
-          parameters: {
-            max_new_tokens: 1,
-            details: true,
-            return_full_text: false
-          }
-        })
-      }
-    );
+  const hfResponse = await fetch(
+    'https://router.huggingface.co/hf-inference/models/HuggingFaceTB/SmolLM3-3B',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        inputs: sentence,
+        parameters: {
+          max_new_tokens: 1,
+          details: true,          // Try this; may not return prefill logprobs on all models
+          return_full_text: false
+        }
+      })
+    }
+  );
 
     if (!hfResponse.ok) {
       const errorText = await hfResponse.text();
