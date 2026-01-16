@@ -49,7 +49,7 @@ app.post('/analyze', async (req, res) => {
     }
 
     const hfResponse = await fetch(
-      'https://router.huggingface.co/hf-inference/models/distilgpt2',
+      'https://router.huggingface.co/hf-inference/models/EleutherAI/gpt-neo-125m',
       {
         method: 'POST',
         headers: {
