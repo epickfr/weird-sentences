@@ -72,7 +72,30 @@ const hfResponse = await fetch(
     }
 
     const data = await hfResponse.json();
+// After const data = await hfResponse.json();
 
+let totalLogProb = 0;
+let tokenCount = 0;
+
+if (data?.details?.prefill?.length) {
+  // Preferred: use prefill logprobs (input tokens)
+  totalLogProb = data.details.prefill
+    .map(token => token.logprob || 0)
+    .reduce((a, b) => a + b, 0);
+  tokenCount = data.details.prefill.length;
+} else if (data?.generated_text || data?.choices?.[0]?.logprobs) {
+  // Fallback: approximate from generated token logprobs if available (some models return under choices)
+  const logprobsData = data.choices?.[0]?.logprobs?.content || [];
+  totalLogProb = logprobsData
+    .map(item => item.logprob || 0)
+    .reduce((a, b) => a + b, 0);
+  tokenCount = logprobsData.length;
+} else {
+  // Ultimate fallback: skip perplexity, set dummy low weirdness or error
+  perplexityInfo = 'Perplexity not available (model limits)';
+  weirdness = 10; // or calculate differently, e.g. based on sentence length/random
+  throw new Error('No usable logprobs; using fallback');
+}
     if (!data?.details?.prefill?.length) {
       throw new Error('No token logprobs returned from model');
     }
